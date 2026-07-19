@@ -3,8 +3,8 @@
 
 ## 1. 数据集定位与架构解耦 (Architecture & Positioning)
 
-本数据集（`001v1.json` / `002v1.json`）是专门为**末端执行器（灵巧手机械手）**定制的纯净姿态数据集。
-This dataset (`001v1.json` / `002v1.json`) is a pure pose dataset customized specifically for **End-Effectors (Dexterous Robotic Hands)**.
+本数据集（包含 `001v1.json`、`002v1.json`，以及最新加入的极限高频压测样本 `003.json` 电吉他速弹数据）是专门为**末端执行器（灵巧手机械手）**定制的纯净姿态数据集。
+This dataset (including `001v1.json`, `002v1.json`, and the newly added extreme high-frequency stress test `003.json` featuring fast electric guitar picking) is a pure pose dataset customized specifically for **End-Effectors (Dexterous Robotic Hands)**.
 
 它采用了顶级的**机器人解耦控制架构（Decoupled Kinematics）**，即：
 It adopts top-tier **Decoupled Kinematics architecture for robotics**, meaning:

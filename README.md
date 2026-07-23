@@ -42,3 +42,15 @@ The JSON is designed for immediate integration into your robot control loops (e.
     "Right": [] // Empty if occluded/not tracked
   }
 }
+
+## 🕹️ Live Web Simulator (Hand Simulator)
+We have added a web-based **Hand Simulator** that visualizes IK tracking in real-time using Three.js, VRM models, and Kalidokit.
+
+### How to use:
+1. Open index.html directly in your browser.
+2. The simulator will attempt to connect to a local Python WebSocket server at ws://127.0.0.1:8768 to receive pose data streams.
+3. Features:
+   * **Stickman Pose rendering**: Visualizes the base 3D hand and upper-body landmarks in real-time.
+   * **VRM Avatar Mapping**: You can **drag and drop** any .vrm character file into the window to visualize the hand tracking mapped to a 3D avatar using Inverse Kinematics.
+
+*Note: Make sure your Python tracking backend is actively broadcasting frame data to port 8768 for live animation.*

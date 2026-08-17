@@ -39,9 +39,9 @@ This dataset and the live real-time engine apply strict rigid body mathematical 
 You can now run the complete **60 FPS Live Motion Capture Studio** on your own Mac and iPhone:
 
 ### 1. Download Precompiled Packages
-Download the latest binaries from [GitHub Releases](https://github.com/guanenyu-prog/Camellia-Golden-Hands/releases):
-* 💻 **`CamelliaMocapStudio_Mac.zip`**: Standalone Mac Workstation App (built-in V11 single-node daemon + WebSocket 8768 + 3D Viewport).
-* 🍎 **`CamelliaNode_iOS.zip`**: Complete Xcode Project for iPhone (Front TrueDepth + Rear LiDAR 60 FPS stream).
+Download the latest binaries directly or from [GitHub Releases](https://github.com/guanenyu-prog/Camellia-Golden-Hands/releases):
+* 💻 **[Download CamelliaMocapStudio_Mac.zip](releases/CamelliaMocapStudio_Mac.zip)** (29 KB): Standalone Mac Workstation App (built-in V11 single-node daemon + WebSocket 8768 + 3D Viewport).
+* 🍎 **[Download CamelliaNode_iOS.zip](releases/CamelliaNode_iOS.zip)** (36 KB): Complete Xcode Project for iPhone (Front TrueDepth + Rear LiDAR 60 FPS stream).
 
 ### 2. Quick 1-Minute Setup
 1. Unzip and run **`CamelliaMocapStudio.app`** on your Mac (it will automatically listen on TCP `8765` and WebSocket `8768`).

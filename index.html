@@ -236,6 +236,8 @@
                         vrmBones = {
                             Chest: vrm.humanoid.getBoneNode(Schema.Chest),
                             Spine: vrm.humanoid.getBoneNode(Schema.Spine),
+                            RightShoulder: vrm.humanoid.getBoneNode(Schema.RightShoulder),
+                            LeftShoulder: vrm.humanoid.getBoneNode(Schema.LeftShoulder),
                             RightUpperArm: vrm.humanoid.getBoneNode(Schema.RightUpperArm),
                             RightLowerArm: vrm.humanoid.getBoneNode(Schema.RightLowerArm),
                             LeftUpperArm: vrm.humanoid.getBoneNode(Schema.LeftUpperArm),
@@ -252,15 +254,14 @@
                 },
                 (progress) => {},
                 (error) => {
-                    console.error("Error loading VRM:", error);
-                    badge.innerText = "⚠ LOAD FAILED. PLEASE DRAG & DROP A .VRM FILE";
-                    badge.style.borderColor = "red";
-                    badge.style.color = "red";
+                    console.warn("Default VRM not found. Ready for Drag & Drop.");
+                    badge.innerText = "● READY: DRAG & DROP A .VRM FILE";
+                    badge.className = "badge waiting";
                 }
             );
         }
 
-        // Try to load default AliciaSolid from v9
+        // Try to load default AliciaSolid from v9 if available
         loadVRM('../v9/AliciaSolid.vrm');
 
         // Drag & Drop Handlers
@@ -296,16 +297,28 @@
             Part.quaternion.slerp(quaternion, lerpAmount);
         };
 
-        // Standard V11 websocket port
-        const ws = new WebSocket('ws://127.0.0.1:8768');
-        
-        ws.onopen = () => console.log("WebSocket Connected (8768)");
-        ws.onerror = () => console.error("WebSocket Error. Python server running?");
-        
+        // Standard V11 websocket with Auto-Reconnect
         let latestData = null;
-        ws.onmessage = (e) => {
-            latestData = JSON.parse(e.data);
-            const data = latestData;
+        let ws = null;
+        function connectWS() {
+            ws = new WebSocket('ws://127.0.0.1:8768');
+            ws.onopen = () => console.log("WebSocket Connected (8768)");
+            ws.onclose = () => {
+                setTimeout(connectWS, 1500); // Auto reconnect
+            };
+            ws.onerror = () => {
+                ws.close();
+            };
+            ws.onmessage = (e) => {
+                try {
+                    latestData = JSON.parse(e.data);
+                    renderStickman(latestData);
+                } catch(err) {}
+            };
+        }
+        connectWS();
+
+        function renderStickman(data) {
             const VIS_SCALE = 2.0; // Scaled down to match VRM proportions
             
             // Render Stickman Pose
@@ -423,14 +436,12 @@
                     let pose2D = [];
                     for(let i=0; i<33; i++) {
                         if(data.pose[i]) {
-                            // strictly preserve 0.0 visibility
                             let vis = data.pose[i].v !== undefined ? data.pose[i].v : 1;
                             pose3D.push({x: -data.pose[i].x, y: data.pose[i].y, z: -data.pose[i].z, visibility: vis});
-                            let p2x = -data.pose[i].x * 0.5 + 0.5;
-                            let p2y = data.pose[i].y * 0.5 + 0.5;
-                            // Clamp pose2D to [0,1] to prevent Kalidokit crash
-                            p2x = Math.max(0, Math.min(1, p2x));
-                            p2y = Math.max(0, Math.min(1, p2y));
+                            let p2x = (-data.pose[i].x * 1.5) + 0.5;
+                            let p2y = (data.pose[i].y * 1.5) + 0.5;
+                            p2x = Math.max(0.01, Math.min(0.99, p2x));
+                            p2y = Math.max(0.01, Math.min(0.99, p2y));
                             pose2D.push({x: p2x, y: p2y, visibility: vis});
                         } else {
                             pose3D.push({x: 0, y: 0, z: 0, visibility: 0});
@@ -438,32 +449,24 @@
                         }
                     }
                     
-                    // 【深度强制校验】: 简单粗暴，手腕和手肘必须在肩膀之前（鼻子这一侧）
-                    // 在 MediaPipe Native 中，Z越小越靠近相机。pose3D 目前是 Native 坐标系。
-                    const noseZ = pose3D[0].z;
-                    const leftShoulderZ = pose3D[11].z;
-                    const rightShoulderZ = pose3D[12].z;
-                    
-                    if (pose3D[13].z > leftShoulderZ) pose3D[13].z = leftShoulderZ - 0.05; // Left Elbow
-                    if (pose3D[15].z > leftShoulderZ) pose3D[15].z = leftShoulderZ - 0.1;  // Left Wrist
-                    if (pose3D[14].z > rightShoulderZ) pose3D[14].z = rightShoulderZ - 0.05; // Right Elbow
-                    if (pose3D[16].z > rightShoulderZ) pose3D[16].z = rightShoulderZ - 0.1;  // Right Wrist
-
-                    // Kalidokit 强制要求双肩和双髋构成躯干四边形来计算 Spine。后端去掉了下半身，我们必须伪造！
+                    // Kalidokit 强制要求双肩和双髋构成躯干四边形来计算 Spine。后端去掉了下半身，进行解剖学延展
                     if (pose3D[11] && pose3D[12]) {
-                        const HIP_OFFSET_Y = 0.55; // 伪造大约 55 厘米的躯干长度 (MediaPipe Y向下为正)
+                        const HIP_OFFSET_Y = 0.55; 
                         pose3D[23] = { x: pose3D[11].x, y: pose3D[11].y + HIP_OFFSET_Y, z: pose3D[11].z, visibility: 1 };
                         pose3D[24] = { x: pose3D[12].x, y: pose3D[12].y + HIP_OFFSET_Y, z: pose3D[12].z, visibility: 1 };
                         
-                        pose2D[23] = { x: pose2D[11].x, y: pose2D[11].y + 0.3, visibility: 1 };
-                        pose2D[24] = { x: pose2D[12].x, y: pose2D[12].y + 0.3, visibility: 1 };
+                        pose2D[23] = { x: pose2D[11].x, y: Math.min(0.99, pose2D[11].y + 0.3), visibility: 1 };
+                        pose2D[24] = { x: pose2D[12].x, y: Math.min(0.99, pose2D[12].y + 0.3), visibility: 1 };
                     }
+
                     // Kalidokit pose expects pose3D and pose2D
                     let riggedPose = Kalidokit.Pose.solve(pose3D, pose2D, { runtime: "mediapipe", imageSize: { width: 640, height: 480 } });
                     
                     if (riggedPose) {
-                        rigRotation("Chest", riggedPose.Spine, 0.25, 0.3);
-                        rigRotation("Spine", riggedPose.Spine, 0.45, 0.3);
+                        rigRotation("Chest", riggedPose.Spine, 0.35, 0.3);
+                        rigRotation("Spine", riggedPose.Spine, 0.5, 0.3);
+                        if (riggedPose.RightShoulder) rigRotation("RightShoulder", riggedPose.RightShoulder, 1, 0.3);
+                        if (riggedPose.LeftShoulder) rigRotation("LeftShoulder", riggedPose.LeftShoulder, 1, 0.3);
                         rigRotation("RightUpperArm", riggedPose.RightUpperArm, 1, 0.3);
                         rigRotation("RightLowerArm", riggedPose.RightLowerArm, 1, 0.3);
                         rigRotation("LeftUpperArm", riggedPose.LeftUpperArm, 1, 0.3);
@@ -476,61 +479,40 @@
                 }
 
                 // 2. Solve Hands
-                // 恢复 Golden 版的映射关系：画面左侧(Left)控 VRM 右手(Right)
+                // 画面左侧物理手(Left)控 VRM 右手(Right)，画面右侧物理手(Right)控 VRM 左手(Left)
                 if (data.hands) {
                     if (data.hands["Left"] && data.hands["Left"].length === 21) {
                         let w = data.hands["Left"][0];
-                        // 1. 绝对不篡改物理坐标，保持真实的物理左手
-                        let hand3D = data.hands["Left"].map(p => ({x: (p.x - w.x) * 1.5, y: (p.y - w.y) * 1.5, z: (p.z - w.z) * 1.5}));
-                        // 2. 真实物理左手 -> 送给 Kalidokit "左手"求解器，彻底消灭 Gimbal Lock 和坐标系崩坏
+                        let hand3D = data.hands["Left"].map(p => ({x: (p.x - w.x) * 1.5, y: (p.y - w.y) * 1.5, z: -(p.z - w.z) * 1.5}));
                         let riggedHand = Kalidokit.Hand.solve(hand3D, "Left"); 
                         if (riggedHand) {
                             for (const [key, value] of Object.entries(riggedHand)) {
-                                // 3. 骨骼名称映射：将左手计算出的骨骼动作，嫁接到 VRM 右手上 (实现镜像)
-                                let boneName = key.replace("Left", "Right");
-                                if (boneName === "RightWrist") boneName = "RightHand";
+                                // 【隔离墙】：跳过手腕（Wrist/Hand），因为小臂 3D 朝向已精准锁定手腕，坚决避免二次旋转翻折！
+                                if (key.endsWith("Wrist") || key.endsWith("Hand")) continue;
                                 
+                                let boneName = key.replace("Left", "Right");
                                 if (currentVRM && !vrmBones[boneName]) {
                                     vrmBones[boneName] = currentVRM.humanoid.getBoneNode(THREE.VRMSchema.HumanoidBoneName[boneName]);
                                 }
-                                
-                                // 4. 数学镜像映射：左右手局部坐标系互为镜像，因此手指的 Y 和 Z 必须取反！
-                                let finalRotation = { x: value.x, y: -value.y, z: -value.z };
-                                if (boneName === "RightHand") {
-                                    // 但是手腕的局部坐标系存在差异，翻转（Roll）和旋转（Yaw）需要正向才能匹配真实动作
-                                    finalRotation.y = value.y;
-                                    finalRotation.z = value.z;
-                                }
-                                
-                                rigRotation(boneName, finalRotation, 1, 0.3);
+                                rigRotation(boneName, value, 1, 0.3);
                             }
                         }
                     }
                     
                     if (data.hands["Right"] && data.hands["Right"].length === 21) {
                         let w = data.hands["Right"][0];
-                        let hand3D = data.hands["Right"].map(p => ({x: (p.x - w.x) * 1.5, y: (p.y - w.y) * 1.5, z: (p.z - w.z) * 1.5}));
-                        // 真实物理右手 -> 送给 "右手" 求解器
+                        let hand3D = data.hands["Right"].map(p => ({x: (p.x - w.x) * 1.5, y: (p.y - w.y) * 1.5, z: -(p.z - w.z) * 1.5}));
                         let riggedHand = Kalidokit.Hand.solve(hand3D, "Right"); 
                         if (riggedHand) {
                             for (const [key, value] of Object.entries(riggedHand)) {
-                                // 映射到 VRM 左手
-                                let boneName = key.replace("Right", "Left");
-                                if (boneName === "LeftWrist") boneName = "LeftHand";
+                                // 【隔离墙】：跳过手腕（Wrist/Hand）
+                                if (key.endsWith("Wrist") || key.endsWith("Hand")) continue;
                                 
+                                let boneName = key.replace("Right", "Left");
                                 if (currentVRM && !vrmBones[boneName]) {
                                     vrmBones[boneName] = currentVRM.humanoid.getBoneNode(THREE.VRMSchema.HumanoidBoneName[boneName]);
                                 }
-                                
-                                // 数学镜像映射：手指的 Y 和 Z 取反
-                                let finalRotation = { x: value.x, y: -value.y, z: -value.z };
-                                if (boneName === "LeftHand") {
-                                    // 手腕的翻转和旋转需要正向
-                                    finalRotation.y = value.y;
-                                    finalRotation.z = value.z;
-                                }
-                                
-                                rigRotation(boneName, finalRotation, 1, 0.3);
+                                rigRotation(boneName, value, 1, 0.3);
                             }
                         }
                     }

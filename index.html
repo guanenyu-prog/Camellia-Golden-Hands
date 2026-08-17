@@ -2,24 +2,554 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Camellia Golden Hands Simulator</title>
+    <title>Camellia V11 VRM Showcase</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
-        #statusBadge { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.7); color: #0f0; padding: 8px 12px; border: 1px solid #0f0; border-radius: 4px; z-index: 100; font-size: 14px; }
-        .waiting { color: #f90 !important; border-color: #f90 !important; }
-        .active { color: #0f0 !important; border-color: #0f0 !important; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        
+        body { 
+            margin: 0; 
+            background: radial-gradient(circle at 50% 50%, #111 0%, #000 100%); 
+            overflow: hidden; 
+            font-family: 'Inter', sans-serif; 
+        }
+        
+        #ui-layer { 
+            position: absolute; 
+            top: 30px; 
+            left: 30px; 
+            color: #fff; 
+            z-index: 10; 
+            pointer-events: none; 
+        }
+        
+        h1 { 
+            margin: 0; 
+            font-size: 32px; 
+            font-weight: 800; 
+            background: linear-gradient(90deg, #ff00f2 0%, #4facfe 100%); 
+            -webkit-background-clip: text; 
+            -webkit-text-fill-color: transparent; 
+            letter-spacing: -1px;
+        }
+        
+        .subtitle {
+            font-size: 11px; 
+            color: #888; 
+            margin-top: 4px; 
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .badge { 
+            display: inline-block; 
+            padding: 6px 16px; 
+            border-radius: 30px; 
+            font-size: 12px; 
+            font-weight: 600; 
+            text-transform: uppercase; 
+            margin-top: 15px; 
+            background: rgba(255,255,255,0.05); 
+            backdrop-filter: blur(10px); 
+            border: 1px solid rgba(255,255,255,0.1); 
+            transition: all 0.3s ease; 
+        }
+        
+        .badge.waiting { 
+            background: rgba(0, 255, 255, 0.05); 
+            border-color: rgba(0,255,255,0.4); 
+            color: #00ffff; 
+        }
+        
+        .badge.active { 
+            background: rgba(0, 255, 100, 0.2); 
+            border-color: #00ff64; 
+            color: #00ff64; 
+            box-shadow: 0 0 30px rgba(0,255,100,0.6); 
+        }
+
+        #drag-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 150, 255, 0.2);
+            border: 5px dashed #00aaff;
+            z-index: 100;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            font-size: 40px;
+            font-weight: 800;
+            pointer-events: none;
+        }
+        
+        #instruction {
+            position: absolute;
+            bottom: 30px;
+            width: 100%;
+            text-align: center;
+            color: rgba(255,255,255,0.3);
+            font-size: 12px;
+            letter-spacing: 1px;
+            pointer-events: none;
+        }
     </style>
-    <!-- Dependencies -->
-    <script src="https://unpkg.com/three@0.133.0/build/three.js"></script>
-    <script src="https://unpkg.com/three@0.133.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://unpkg.com/three@0.133.0/examples/js/loaders/GLTFLoader.js"></script>
-    <!-- VRM & Kalidokit -->
-    <script src="https://unpkg.com/@pixiv/three-vrm@0.6.7/lib/three-vrm.js"></script>
-    <script src="https://unpkg.com/kalidokit@1.1.5/dist/kalidokit.umd.js"></script>
+    
+    <!-- Three.js + VRM + Kalidokit Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@0.6.7/lib/three-vrm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/kalidokit@1.1.5/dist/kalidokit.umd.js"></script>
 </head>
 <body>
-    <div id="statusBadge" class="waiting">⏳ WAITING FOR WEBSOCKET DATA...</div>
-    <script src="hand_simulator.js"></script>
+    <div id="ui-layer">
+        <h1>CAMELLIA V11.5 VRM SHOWCASE</h1>
+        <div class="subtitle">Drag & Drop .vrm Model | Upper-Body Kinematics Lock</div>
+        <div id="statusBadge" class="badge waiting">● WAITING FOR VRM</div>
+    </div>
+    
+    <div id="drag-layer">DROP VRM FILE HERE</div>
+    
+    <div id="instruction">
+        [ TrueDepth V11 Core ] | Kalidokit IK Solver Active | Lower Body Static Lock
+    </div>
+
+    <script>
+        // --- 1. Three.js Scene Setup ---
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x000000, 0.05);
+        
+        // Push camera down a bit to frame upper body nicely
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 1.2, 3); 
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        // Enhance lighting for models
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        document.body.appendChild(renderer.domElement);
+        
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.target.set(0, 1, 0);
+
+        // Grid & Lights
+        const grid = new THREE.GridHelper(20, 40, 0x0088ff, 0x001122);
+        grid.position.y = 0;
+        scene.add(grid);
+
+        const light = new THREE.DirectionalLight(0xffffff, 1.0);
+        light.position.set(1, 2, 3).normalize();
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+        // --- 1.5 Stickman Setup ---
+        const matPose = new THREE.MeshBasicMaterial({ color: 0x00ffff }); // Bright Cyan
+        const matHandL = new THREE.MeshBasicMaterial({ color: 0xff00ff }); // Bright Magenta
+        const matHandR = new THREE.MeshBasicMaterial({ color: 0xffd700 }); // Bright Gold
+        
+        const matLinePose = new THREE.LineBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.6 });
+        const matLineHandL = new THREE.LineBasicMaterial({ color: 0xff66ff, transparent: true, opacity: 0.8 });
+        const matLineHandR = new THREE.LineBasicMaterial({ color: 0xffe666, transparent: true, opacity: 0.8 });
+
+        const groupStickman = new THREE.Group();
+        groupStickman.position.set(1.0, 1, 0); // Offset to the right
+        scene.add(groupStickman);
+
+        const groupPose = new THREE.Group();
+        const groupHands = new THREE.Group();
+        groupStickman.add(groupPose);
+        groupStickman.add(groupHands);
+
+        const POSE_PAIRS = [[0, 1], [1, 2], [2, 3], [3, 7], [0, 4], [4, 5], [5, 6], [6, 8], [9, 10], [11, 12], [11, 13], [13, 15], [12, 14], [14, 16]];
+        const HAND_PAIRS = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12], [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17]];
+
+        let meshesPose = [];
+        let meshesHandL = [];
+        let meshesHandR = [];
+        let linesPose = [];
+        let linesHandL = [];
+        let linesHandR = [];
+
+        const geoSpherePose = new THREE.SphereGeometry(0.04, 16, 16);
+        for(let i=0; i<17; i++) { 
+            let mesh = new THREE.Mesh(geoSpherePose, matPose);
+            groupPose.add(mesh);
+            meshesPose.push(mesh);
+        }
+        
+        const geoSphereHandGolden = new THREE.SphereGeometry(0.02, 16, 16);
+        for(let i=0; i<21; i++) {
+            let mL = new THREE.Mesh(geoSphereHandGolden, matHandL);
+            let mR = new THREE.Mesh(geoSphereHandGolden, matHandR);
+            groupHands.add(mL); groupHands.add(mR);
+            meshesHandL.push(mL); meshesHandR.push(mR);
+        }
+
+        POSE_PAIRS.forEach(pair => {
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+            const line = new THREE.Line(geo, matLinePose);
+            groupPose.add(line);
+            linesPose.push({line: line, p1: pair[0], p2: pair[1]});
+        });
+
+        HAND_PAIRS.forEach(pair => {
+            const geoL = new THREE.BufferGeometry();
+            geoL.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+            const lineL = new THREE.Line(geoL, matLineHandL);
+            groupHands.add(lineL);
+            linesHandL.push({line: lineL, p1: pair[0], p2: pair[1]});
+
+            const geoR = new THREE.BufferGeometry();
+            geoR.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+            const lineR = new THREE.Line(geoR, matLineHandR);
+            groupHands.add(lineR);
+            linesHandR.push({line: lineR, p1: pair[0], p2: pair[1]});
+        });
+
+        // --- 2. VRM Loading Logic ---
+        let currentVRM = null;
+        let vrmBones = {};
+        const gltfLoader = new THREE.GLTFLoader();
+
+        function loadVRM(url) {
+            const badge = document.getElementById('statusBadge');
+            badge.innerText = "● LOADING VRM MODEL...";
+            badge.className = "badge waiting";
+            
+            gltfLoader.load(url,
+                (gltf) => {
+                    if (THREE.VRMUtils) THREE.VRMUtils.removeUnnecessaryJoints(gltf.scene);
+                    THREE.VRM.from(gltf).then((vrm) => {
+                        if (currentVRM) {
+                            scene.remove(currentVRM.scene);
+                            currentVRM.dispose();
+                        }
+                        currentVRM = vrm;
+                        scene.add(vrm.scene);
+                        vrm.scene.rotation.y = Math.PI; // Face the camera
+                        
+                        // Cache common bones for Kalidokit
+                        const Schema = THREE.VRMSchema.HumanoidBoneName;
+                        vrmBones = {
+                            Chest: vrm.humanoid.getBoneNode(Schema.Chest),
+                            Spine: vrm.humanoid.getBoneNode(Schema.Spine),
+                            RightUpperArm: vrm.humanoid.getBoneNode(Schema.RightUpperArm),
+                            RightLowerArm: vrm.humanoid.getBoneNode(Schema.RightLowerArm),
+                            LeftUpperArm: vrm.humanoid.getBoneNode(Schema.LeftUpperArm),
+                            LeftLowerArm: vrm.humanoid.getBoneNode(Schema.LeftLowerArm),
+                            RightHand: vrm.humanoid.getBoneNode(Schema.RightHand),
+                            LeftHand: vrm.humanoid.getBoneNode(Schema.LeftHand),
+                            Head: vrm.humanoid.getBoneNode(Schema.Head),
+                            Neck: vrm.humanoid.getBoneNode(Schema.Neck)
+                        };
+
+                        badge.innerText = "✔ VRM ACTIVE (UPPER-BODY ONLY)";
+                        badge.className = "badge active";
+                    });
+                },
+                (progress) => {},
+                (error) => {
+                    console.error("Error loading VRM:", error);
+                    badge.innerText = "⚠ LOAD FAILED. PLEASE DRAG & DROP A .VRM FILE";
+                    badge.style.borderColor = "red";
+                    badge.style.color = "red";
+                }
+            );
+        }
+
+        // Try to load default AliciaSolid from v9
+        loadVRM('../v9/AliciaSolid.vrm');
+
+        // Drag & Drop Handlers
+        const dragLayer = document.getElementById('drag-layer');
+        document.body.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dragLayer.style.display = 'flex';
+        });
+        document.body.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dragLayer.style.display = 'none';
+        });
+        document.body.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dragLayer.style.display = 'none';
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                const file = e.dataTransfer.files[0];
+                if (file.name.toLowerCase().endsWith('.vrm')) {
+                    const url = URL.createObjectURL(file);
+                    loadVRM(url);
+                }
+            }
+        });
+
+        // --- 3. Kalidokit IK Solver & WebSocket ---
+        // Helper to rotate bones smoothly
+        const rigRotation = (name, rotation = { x: 0, y: 0, z: 0 }, dampener = 1, lerpAmount = 0.3) => {
+            if (!currentVRM || !vrmBones[name]) return;
+            if (isNaN(rotation.x) || isNaN(rotation.y) || isNaN(rotation.z)) return; // Failsafe against singularity
+            const Part = vrmBones[name];
+            let euler = new THREE.Euler(rotation.x * dampener, rotation.y * dampener, rotation.z * dampener);
+            let quaternion = new THREE.Quaternion().setFromEuler(euler);
+            Part.quaternion.slerp(quaternion, lerpAmount);
+        };
+
+        // Standard V11 websocket port
+        const ws = new WebSocket('ws://127.0.0.1:8768');
+        
+        ws.onopen = () => console.log("WebSocket Connected (8768)");
+        ws.onerror = () => console.error("WebSocket Error. Python server running?");
+        
+        let latestData = null;
+        ws.onmessage = (e) => {
+            latestData = JSON.parse(e.data);
+            const data = latestData;
+            const VIS_SCALE = 2.0; // Scaled down to match VRM proportions
+            
+            // Render Stickman Pose
+            if(data.pose) {
+                const pList = Object.keys(data.pose).map(k => ({id: parseInt(k), ...data.pose[k]}));
+                pList.forEach(p => {
+                    if(meshesPose[p.id]) {
+                        meshesPose[p.id].position.set(p.x * VIS_SCALE, -p.y * VIS_SCALE, p.z * VIS_SCALE);
+                        meshesPose[p.id].visible = true;
+                    }
+                });
+                linesPose.forEach(l => {
+                    if(data.pose[l.p1] && data.pose[l.p2]) {
+                        const p1 = data.pose[l.p1]; const p2 = data.pose[l.p2];
+                        l.line.geometry.attributes.position.array[0] = p1.x * VIS_SCALE;
+                        l.line.geometry.attributes.position.array[1] = -p1.y * VIS_SCALE;
+                        l.line.geometry.attributes.position.array[2] = p1.z * VIS_SCALE; // Keep native Z for stickman so it points FORWARDS out of screen (Wait, +Z is out of screen in Threejs! Python Z is + when closer. So +Z comes OUT! Correct!)
+                        l.line.geometry.attributes.position.array[3] = p2.x * VIS_SCALE;
+                        l.line.geometry.attributes.position.array[4] = -p2.y * VIS_SCALE;
+                        l.line.geometry.attributes.position.array[5] = p2.z * VIS_SCALE;
+                        l.line.geometry.attributes.position.needsUpdate = true;
+                        l.line.visible = true;
+                    } else l.line.visible = false;
+                });
+            } else {
+                meshesPose.forEach(m => m.position.set(0,100,0)); 
+                linesPose.forEach(l => l.line.visible = false);
+            }
+
+            // Render Stickman Hands
+            if(data.golden) {
+                let hL = null, hR = null;
+                if (data.hands["Left"]) hL = data.hands["Left"];
+                if (data.hands["Right"]) hR = data.hands["Right"];
+                
+                if(hL && hL.length > 0) {
+                    let poseWristL = data.pose[15];
+                    let wL = hL[0];
+                    hL.forEach((p, i) => { 
+                        let px = poseWristL.x + (p.x - wL.x);
+                        let py = poseWristL.y + (p.y - wL.y);
+                        let pz = poseWristL.z + (p.z - wL.z);
+                        meshesHandL[i].position.set(px * VIS_SCALE, -py * VIS_SCALE, pz * VIS_SCALE); 
+                        meshesHandL[i].visible = true; 
+                    });
+                    linesHandL.forEach(l => {
+                        const p1 = hL[l.p1]; const p2 = hL[l.p2];
+                        let p1x = poseWristL.x + (p1.x - wL.x); let p1y = poseWristL.y + (p1.y - wL.y); let p1z = poseWristL.z + (p1.z - wL.z);
+                        let p2x = poseWristL.x + (p2.x - wL.x); let p2y = poseWristL.y + (p2.y - wL.y); let p2z = poseWristL.z + (p2.z - wL.z);
+                        l.line.geometry.attributes.position.array[0] = p1x * VIS_SCALE;
+                        l.line.geometry.attributes.position.array[1] = -p1y * VIS_SCALE;
+                        l.line.geometry.attributes.position.array[2] = p1z * VIS_SCALE;
+                        l.line.geometry.attributes.position.array[3] = p2x * VIS_SCALE;
+                        l.line.geometry.attributes.position.array[4] = -p2y * VIS_SCALE;
+                        l.line.geometry.attributes.position.array[5] = p2z * VIS_SCALE;
+                        l.line.geometry.attributes.position.needsUpdate = true;
+                        l.line.visible = true;
+                    });
+                } else {
+                    meshesHandL.forEach(m => m.position.set(0,100,0));
+                    meshesHandL.forEach(m => m.visible = false);
+                    linesHandL.forEach(l => l.line.visible = false);
+                }
+                
+                if(hR && hR.length > 0) {
+                    let poseWristR = data.pose[16];
+                    let wR = hR[0];
+                    hR.forEach((p, i) => { 
+                        let px = poseWristR.x + (p.x - wR.x);
+                        let py = poseWristR.y + (p.y - wR.y);
+                        let pz = poseWristR.z + (p.z - wR.z);
+                        meshesHandR[i].position.set(px * VIS_SCALE, -py * VIS_SCALE, pz * VIS_SCALE); 
+                        meshesHandR[i].visible = true; 
+                    });
+                    linesHandR.forEach(l => {
+                        const p1 = hR[l.p1]; const p2 = hR[l.p2];
+                        let p1x = poseWristR.x + (p1.x - wR.x); let p1y = poseWristR.y + (p1.y - wR.y); let p1z = poseWristR.z + (p1.z - wR.z);
+                        let p2x = poseWristR.x + (p2.x - wR.x); let p2y = poseWristR.y + (p2.y - wR.y); let p2z = poseWristR.z + (p2.z - wR.z);
+                        l.line.geometry.attributes.position.array[0] = p1x * VIS_SCALE;
+                        l.line.geometry.attributes.position.array[1] = -p1y * VIS_SCALE;
+                        l.line.geometry.attributes.position.array[2] = p1z * VIS_SCALE;
+                        l.line.geometry.attributes.position.array[3] = p2x * VIS_SCALE;
+                        l.line.geometry.attributes.position.array[4] = -p2y * VIS_SCALE;
+                        l.line.geometry.attributes.position.array[5] = p2z * VIS_SCALE;
+                        l.line.geometry.attributes.position.needsUpdate = true;
+                        l.line.visible = true;
+                    });
+                } else {
+                    meshesHandR.forEach(m => m.position.set(0,100,0));
+                    meshesHandR.forEach(m => m.visible = false);
+                    linesHandR.forEach(l => l.line.visible = false);
+                }
+            } else {
+                meshesHandL.forEach(m => m.position.set(0,100,0));
+                meshesHandL.forEach(m => m.visible = false);
+                linesHandL.forEach(l => l.line.visible = false);
+                meshesHandR.forEach(m => m.position.set(0,100,0));
+                meshesHandR.forEach(m => m.visible = false);
+                linesHandR.forEach(l => l.line.visible = false);
+            }
+        };
+
+        // --- 4. Render Loop ---
+        let clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (latestData && currentVRM) {
+                const data = latestData;
+                latestData = null; // Consume data
+
+                // 1. Solve Upper Body Pose (Ignore Legs)
+                if (data.pose) {
+                    let pose3D = [];
+                    let pose2D = [];
+                    for(let i=0; i<33; i++) {
+                        if(data.pose[i]) {
+                            // strictly preserve 0.0 visibility
+                            let vis = data.pose[i].v !== undefined ? data.pose[i].v : 1;
+                            pose3D.push({x: -data.pose[i].x, y: data.pose[i].y, z: -data.pose[i].z, visibility: vis});
+                            let p2x = -data.pose[i].x * 0.5 + 0.5;
+                            let p2y = data.pose[i].y * 0.5 + 0.5;
+                            // Clamp pose2D to [0,1] to prevent Kalidokit crash
+                            p2x = Math.max(0, Math.min(1, p2x));
+                            p2y = Math.max(0, Math.min(1, p2y));
+                            pose2D.push({x: p2x, y: p2y, visibility: vis});
+                        } else {
+                            pose3D.push({x: 0, y: 0, z: 0, visibility: 0});
+                            pose2D.push({x: 0, y: 0, visibility: 0});
+                        }
+                    }
+                    
+                    // 【深度强制校验】: 简单粗暴，手腕和手肘必须在肩膀之前（鼻子这一侧）
+                    // 在 MediaPipe Native 中，Z越小越靠近相机。pose3D 目前是 Native 坐标系。
+                    const noseZ = pose3D[0].z;
+                    const leftShoulderZ = pose3D[11].z;
+                    const rightShoulderZ = pose3D[12].z;
+                    
+                    if (pose3D[13].z > leftShoulderZ) pose3D[13].z = leftShoulderZ - 0.05; // Left Elbow
+                    if (pose3D[15].z > leftShoulderZ) pose3D[15].z = leftShoulderZ - 0.1;  // Left Wrist
+                    if (pose3D[14].z > rightShoulderZ) pose3D[14].z = rightShoulderZ - 0.05; // Right Elbow
+                    if (pose3D[16].z > rightShoulderZ) pose3D[16].z = rightShoulderZ - 0.1;  // Right Wrist
+
+                    // Kalidokit 强制要求双肩和双髋构成躯干四边形来计算 Spine。后端去掉了下半身，我们必须伪造！
+                    if (pose3D[11] && pose3D[12]) {
+                        const HIP_OFFSET_Y = 0.55; // 伪造大约 55 厘米的躯干长度 (MediaPipe Y向下为正)
+                        pose3D[23] = { x: pose3D[11].x, y: pose3D[11].y + HIP_OFFSET_Y, z: pose3D[11].z, visibility: 1 };
+                        pose3D[24] = { x: pose3D[12].x, y: pose3D[12].y + HIP_OFFSET_Y, z: pose3D[12].z, visibility: 1 };
+                        
+                        pose2D[23] = { x: pose2D[11].x, y: pose2D[11].y + 0.3, visibility: 1 };
+                        pose2D[24] = { x: pose2D[12].x, y: pose2D[12].y + 0.3, visibility: 1 };
+                    }
+                    // Kalidokit pose expects pose3D and pose2D
+                    let riggedPose = Kalidokit.Pose.solve(pose3D, pose2D, { runtime: "mediapipe", imageSize: { width: 640, height: 480 } });
+                    
+                    if (riggedPose) {
+                        rigRotation("Chest", riggedPose.Spine, 0.25, 0.3);
+                        rigRotation("Spine", riggedPose.Spine, 0.45, 0.3);
+                        rigRotation("RightUpperArm", riggedPose.RightUpperArm, 1, 0.3);
+                        rigRotation("RightLowerArm", riggedPose.RightLowerArm, 1, 0.3);
+                        rigRotation("LeftUpperArm", riggedPose.LeftUpperArm, 1, 0.3);
+                        rigRotation("LeftLowerArm", riggedPose.LeftLowerArm, 1, 0.3);
+                        
+                        if (riggedPose.Head) {
+                            rigRotation("Head", riggedPose.Head, 1, 0.3);
+                        }
+                    }
+                }
+
+                // 2. Solve Hands
+                // 恢复 Golden 版的映射关系：画面左侧(Left)控 VRM 右手(Right)
+                if (data.hands) {
+                    if (data.hands["Left"] && data.hands["Left"].length === 21) {
+                        let w = data.hands["Left"][0];
+                        // 1. 绝对不篡改物理坐标，保持真实的物理左手
+                        let hand3D = data.hands["Left"].map(p => ({x: (p.x - w.x) * 1.5, y: (p.y - w.y) * 1.5, z: (p.z - w.z) * 1.5}));
+                        // 2. 真实物理左手 -> 送给 Kalidokit "左手"求解器，彻底消灭 Gimbal Lock 和坐标系崩坏
+                        let riggedHand = Kalidokit.Hand.solve(hand3D, "Left"); 
+                        if (riggedHand) {
+                            for (const [key, value] of Object.entries(riggedHand)) {
+                                // 3. 骨骼名称映射：将左手计算出的骨骼动作，嫁接到 VRM 右手上 (实现镜像)
+                                let boneName = key.replace("Left", "Right");
+                                if (boneName === "RightWrist") boneName = "RightHand";
+                                
+                                if (currentVRM && !vrmBones[boneName]) {
+                                    vrmBones[boneName] = currentVRM.humanoid.getBoneNode(THREE.VRMSchema.HumanoidBoneName[boneName]);
+                                }
+                                
+                                // 4. 数学镜像映射：左右手局部坐标系互为镜像，因此手指的 Y 和 Z 必须取反！
+                                let finalRotation = { x: value.x, y: -value.y, z: -value.z };
+                                if (boneName === "RightHand") {
+                                    // 但是手腕的局部坐标系存在差异，翻转（Roll）和旋转（Yaw）需要正向才能匹配真实动作
+                                    finalRotation.y = value.y;
+                                    finalRotation.z = value.z;
+                                }
+                                
+                                rigRotation(boneName, finalRotation, 1, 0.3);
+                            }
+                        }
+                    }
+                    
+                    if (data.hands["Right"] && data.hands["Right"].length === 21) {
+                        let w = data.hands["Right"][0];
+                        let hand3D = data.hands["Right"].map(p => ({x: (p.x - w.x) * 1.5, y: (p.y - w.y) * 1.5, z: (p.z - w.z) * 1.5}));
+                        // 真实物理右手 -> 送给 "右手" 求解器
+                        let riggedHand = Kalidokit.Hand.solve(hand3D, "Right"); 
+                        if (riggedHand) {
+                            for (const [key, value] of Object.entries(riggedHand)) {
+                                // 映射到 VRM 左手
+                                let boneName = key.replace("Right", "Left");
+                                if (boneName === "LeftWrist") boneName = "LeftHand";
+                                
+                                if (currentVRM && !vrmBones[boneName]) {
+                                    vrmBones[boneName] = currentVRM.humanoid.getBoneNode(THREE.VRMSchema.HumanoidBoneName[boneName]);
+                                }
+                                
+                                // 数学镜像映射：手指的 Y 和 Z 取反
+                                let finalRotation = { x: value.x, y: -value.y, z: -value.z };
+                                if (boneName === "LeftHand") {
+                                    // 手腕的翻转和旋转需要正向
+                                    finalRotation.y = value.y;
+                                    finalRotation.z = value.z;
+                                }
+                                
+                                rigRotation(boneName, finalRotation, 1, 0.3);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (currentVRM) {
+                currentVRM.update(clock.getDelta());
+            }
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
 </body>
 </html>
